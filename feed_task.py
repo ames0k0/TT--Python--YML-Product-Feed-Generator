@@ -1,68 +1,75 @@
 from datetime import datetime
 
 
-def filter_active_products(products_stream):
-    for product in products_stream:
-        if not product["is_active"]:
-            continue
-        yield product
+def offer_product_is_active(product, categories) -> bool:
+    return bool(product["is_active"])
 
 
-def filter_products_with_name(products_stream):
-    for product in products_stream:
-        if not product["name"]:
-            continue
-        if not product["name"].strip():
-            continue
-        yield product
+def offer_product_has_name(product, categories) -> bool:
+    name = product["name"]
+    if not name:
+        return False
+
+    name = name.strip()
+    if not name:
+        return False
+
+    return True
 
 
-def filter_products_with_picture(products_stream):
-    for product in products_stream:
-        if not product["image_url"]:
-            continue
-        if not (
-            product["image_url"].strip().startswith("http://")
-            or
-            product["image_url"].strip().startswith("https://")
-        ):
-            continue
-        yield product
+def offer_product_has_picture(product, categories) -> bool:
+    picture = product["image_url"]
+    if not picture:
+        return False
+
+    picture = picture.strip()
+    if not picture:
+        return False
+
+    if not any((
+        picture.startswith("http://"),
+        picture.startswith("https://"),
+    )):
+        return False
+
+    return True
 
 
-def filter_products_with_price(products_stream, gt: float = 0.0):
-    for product in products_stream:
-        price = product["price"]
-        if not price:
-            continue
-        price = float(price.strip())
-        if price <= gt:
-            continue
-        yield product
+def offer_product_has_valid_price(product, categories) -> bool:
+    price = product["price"]
+    if not price:
+        return False
+
+    price = price.strip()
+    if not price:
+        return False
+
+    try:
+        price = float(price)
+    except ValueError:
+        return False
+
+    if price <= 0.0:
+        return False
+
+    return True
 
 
-def filter_products_with_active_category(products_stream, categories):
-    for product in products_stream:
-        product_category = None
-        for category in categories:
-            if product["category_id"] == category["id"]:
-                product_category = category
-                break
-        if not product_category:
-            continue
-        if not product_category["is_active"]:
-            continue
-        yield product
+def offer_product_category_is_active(product, categories) -> bool:
+    product_category = None
 
-
-def filter_categories_by_products(products_stream, categories):
-    product_categories_id = set()
-    for product in products_stream:
-        product_categories_id.add(product["category_id"])
     for category in categories:
-        if category["id"] not in product_categories_id:
-            continue
-        yield category
+        if product["category_id"] == category["id"]:
+            product_category = category
+            break
+
+    if not product_category:
+        return False
+
+    if not product_category["is_active"]:
+        return False
+
+    return True
 
 
 def build_yml(products, categories, generated_at) -> str:
@@ -77,34 +84,30 @@ def build_yml(products, categories, generated_at) -> str:
 
     xml += '<currencies><currency id="RUB" rate="1"/></currencies>'
 
-    xml += "<categories>"
+    offer_validators = [
+        offer_product_is_active,
+        offer_product_has_name,
+        offer_product_has_picture,
+        offer_product_has_valid_price,
+        offer_product_category_is_active,
+    ]
 
-    # ...
-    products_stream = filter_active_products(products_stream=products)
-    products_stream = filter_products_with_name(products_stream=products_stream)
-    products_stream = filter_products_with_picture(products_stream=products_stream)
-    products_stream = filter_products_with_price(products_stream=products_stream)
-    products_stream = filter_products_with_active_category(
-        products_stream=products_stream,
-        categories=categories,
-    )
-
-    # TODO: sort_by_id
-    products_stream = list(products_stream)
-
-    # TODO: sort_by_id
-    categories_stream = filter_categories_by_products(
-        products_stream=products_stream,
-        categories=categories,
-    )
-    for category in categories_stream:
-        xml += f'<category id="{category["id"]}">{category["name"]}</category>'
-
-    xml += "</categories>"
+    products_categories_ids = set()
     xml += "<offers>"
 
-    for product in products_stream:
-        print(product["id"], end=' ')
+    for product in sorted(
+        products,
+        key=lambda product: product["id"],
+    ):
+        if not all((
+            [
+                validator(product=product, categories=categories)
+                for validator in offer_validators
+            ]
+        )):
+            continue
+
+        products_categories_ids.add(product["category_id"])
 
         xml += f'<offer id="{product["id"]}" available="{product["stock"]}">'
 
@@ -114,24 +117,39 @@ def build_yml(products, categories, generated_at) -> str:
 
         xml += f"<price>{price}</price>"
 
-        # TODO: document_builder.add_old_price ??
-        if product["old_price"]:
-            if float(product["old_price"]) != 0.0:
-                if float(product["old_price"]) > float(product["price"]):
-                    xml += f"<oldprice>{product['old_price']}</oldprice>"
-                    print(product["price"], "::", product["old_price"])
+        product_price = float(product["price"])
+        product_old_price = product.get("old_price") or "0"
+
+        try:
+            product_old_price = float(product_old_price)
+        except ValueError:
+            product_old_price = 0.0
+
+        if product_old_price > product_price:
+            xml += f"<oldprice>{product['old_price']}</oldprice>"
 
         xml += "<currencyId>RUB</currencyId>"
         xml += f"<categoryId>{product['category_id']}</categoryId>"
         xml += f"<picture>{product['image_url']}</picture>"
         xml += f"<name>{product['name']}</name>"
+
         if product["description"]:
             xml += f"<description>{product['description']}</description>"
-        else:
-            print(">>NODESC>>", product["id"])
+
         xml += "</offer>"
 
     xml += "</offers>"
+    xml += "<categories>"
+
+    for category in sorted(
+        categories,
+        key=lambda category: category["id"],
+    ):
+        if category["id"] not in products_categories_ids:
+            continue
+        xml += f'<category id="{category["id"]}">{category["name"]}</category>'
+
+    xml += "</categories>"
     xml += "</shop>"
     xml += "</yml_catalog>"
 
