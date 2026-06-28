@@ -1,3 +1,11 @@
+"""
+
+RefList:
+- https://barakaev.ru/feedchecker
+- https://www.w3schools.com/xml/xml_syntax.asp
+
+"""
+
 from datetime import datetime
 
 
@@ -72,6 +80,19 @@ def offer_product_category_is_active(product, categories) -> bool:
     return True
 
 
+def document_escape_special_chars(value):
+    CHARACTER_TO_ENTITY_REFERENCE_MAP = {
+        "<": "&lt;",
+        ">": "&gt;",
+        "&": "&amp;",
+        "\'": "&apos;",
+        "\"": "&quot;",
+    }
+    for char, entity in CHARACTER_TO_ENTITY_REFERENCE_MAP.items():
+        value = value.replace(char, entity)
+    return value
+
+
 def build_yml(products, categories, generated_at) -> str:
     xml = '<?xml version="1.0" encoding="UTF-8"?>'
 
@@ -109,7 +130,10 @@ def build_yml(products, categories, generated_at) -> str:
 
         products_categories_ids.add(product["category_id"])
 
-        xml += f'<offer id="{product["id"]}" available="{product["stock"]}">'
+        xml += '<offer id="{product_id}" available="{available}">'.format(
+            product_id=product["id"],
+            available="true" if product["stock"] else "false",
+        )
 
         xml += f"<url>https://example.test/products/{product['slug']}/</url>"
 
@@ -131,10 +155,18 @@ def build_yml(products, categories, generated_at) -> str:
         xml += "<currencyId>RUB</currencyId>"
         xml += f"<categoryId>{product['category_id']}</categoryId>"
         xml += f"<picture>{product['image_url']}</picture>"
-        xml += f"<name>{product['name']}</name>"
+        xml += "<name>{product_name}</name>".format(
+            product_name=document_escape_special_chars(
+                value=product['name'],
+            ),
+        )
 
         if product["description"]:
-            xml += f"<description>{product['description']}</description>"
+            xml += "<description>{product_description}</description>".format(
+                product_description=document_escape_special_chars(
+                    value=product['description'],
+                ),
+            )
 
         xml += "</offer>"
 
@@ -147,7 +179,12 @@ def build_yml(products, categories, generated_at) -> str:
     ):
         if category["id"] not in products_categories_ids:
             continue
-        xml += f'<category id="{category["id"]}">{category["name"]}</category>'
+        xml += '<category id="{category_id}">{category_name}</category>'.format(
+            category_id=category["id"],
+            category_name=document_escape_special_chars(
+                value=category["name"],
+            )
+        )
 
     xml += "</categories>"
     xml += "</shop>"
@@ -270,3 +307,6 @@ if __name__ == "__main__":
         generated_at=datetime(2026, 6, 18, 12, 0),
     )
     # print(result)
+
+    with open("test.yml", "w") as ftw:
+        ftw.write(result)
