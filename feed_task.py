@@ -1,8 +1,12 @@
 """
 
+Source:
+- https://github.com/ames0k0/TT--Python--YML-Product-Feed-Generator
+
 RefList:
 - https://barakaev.ru/feedchecker
 - https://www.w3schools.com/xml/xml_syntax.asp
+- https://ssojet.com/serialize-and-deserialize/serialize-and-deserialize-xml-in-django#integrating-xml-handling-in-django-views
 
 """
 
@@ -10,7 +14,19 @@ from datetime import datetime
 import xml.etree.ElementTree as ET
 
 
-def build_yml(products, categories, generated_at: datetime) -> str:
+def build_yml(products, categories, generated_at) -> str:
+    """
+    Usage Example:
+
+    >>> from django.http import HttpResponse
+    >>> from feed_task import build_yml
+    >>> result = build_yml(
+    >>>     products=Product.objects.values(),
+    >>>     categories=Category.objects.values(),
+    >>>     generated_at=datetime.now(),
+    >>> )
+    >>> return HttpResponse(result, content_type='application/xml')
+    """
     xml = ET.Element(
         "yml_catalog",
         date=generated_at.strftime("%Y-%m-%d %H:%M"),
@@ -70,7 +86,9 @@ def build_yml(products, categories, generated_at: datetime) -> str:
         ET.SubElement(
             elem_shop_offer,
             "price",
-        ).text = product["price"].replace(".", ",")
+        ).text = format_product_price(
+            price=product["price"],
+        )
 
         product_price = float(product["price"])
         product_old_price = product.get("old_price") or "0"
@@ -84,7 +102,9 @@ def build_yml(products, categories, generated_at: datetime) -> str:
             ET.SubElement(
                 elem_shop_offer,
                 "oldprice",
-            ).text = product['old_price']
+            ).text = format_product_price(
+                price=product['old_price'],
+            )
 
         ET.SubElement(elem_shop_offer, "currencyId").text = "RUB"
         ET.SubElement(
@@ -120,6 +140,10 @@ def build_yml(products, categories, generated_at: datetime) -> str:
         encoding="UTF-8",
         xml_declaration=True,
     ).decode()
+
+
+def format_product_price(price: str) -> str:
+    return f"{float(price):.2f}".replace(".", ",")
 
 
 def offer_product_is_active(product, categories) -> bool:
