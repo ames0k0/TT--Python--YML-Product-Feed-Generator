@@ -7,6 +7,7 @@ RefList:
 """
 
 from datetime import datetime
+import xml.etree.ElementTree as ET
 
 
 def offer_product_is_active(product, categories) -> bool:
@@ -80,30 +81,25 @@ def offer_product_category_is_active(product, categories) -> bool:
     return True
 
 
-def document_escape_special_chars(value):
-    CHARACTER_TO_ENTITY_REFERENCE_MAP = {
-        "<": "&lt;",
-        ">": "&gt;",
-        "&": "&amp;",
-        "\'": "&apos;",
-        "\"": "&quot;",
-    }
-    for char, entity in CHARACTER_TO_ENTITY_REFERENCE_MAP.items():
-        value = value.replace(char, entity)
-    return value
+def build_yml(products, categories, generated_at: datetime) -> str:
+    xml = ET.Element(
+        "yml_catalog",
+        date=generated_at.strftime("%Y-%m-%d %H:%M"),
+    )
 
+    elem_shop = ET.SubElement(xml, "shop")
 
-def build_yml(products, categories, generated_at) -> str:
-    xml = '<?xml version="1.0" encoding="UTF-8"?>'
+    ET.SubElement(elem_shop, "name").text = "Test Shop"
+    ET.SubElement(elem_shop, "company").text = "Test Company"
+    ET.SubElement(elem_shop, "url").text = "https://example.test"
 
-    xml += f'<yml_catalog date="{generated_at}">'
-    xml += "<shop>"
-
-    xml += "<name>Test Shop</name>"
-    xml += "<company>Test Company</company>"
-    xml += "<url>https://example.test</url>"
-
-    xml += '<currencies><currency id="RUB" rate="1"/></currencies>'
+    elem_shop_currencies = ET.SubElement(elem_shop, "currencies")
+    ET.SubElement(
+        elem_shop_currencies,
+        "currency",
+        id="RUB",
+        rate="1",
+    )
 
     offer_validators = [
         offer_product_is_active,
@@ -114,7 +110,8 @@ def build_yml(products, categories, generated_at) -> str:
     ]
 
     products_categories_ids = set()
-    xml += "<offers>"
+
+    elem_shop_offers = ET.SubElement(elem_shop, "offers")
 
     for product in sorted(
         products,
@@ -130,16 +127,21 @@ def build_yml(products, categories, generated_at) -> str:
 
         products_categories_ids.add(product["category_id"])
 
-        xml += '<offer id="{product_id}" available="{available}">'.format(
-            product_id=product["id"],
+        elem_shop_offer = ET.SubElement(
+            elem_shop_offers,
+            "offer",
+            id=str(product["id"]),
             available="true" if product["stock"] else "false",
         )
 
-        xml += f"<url>https://example.test/products/{product['slug']}/</url>"
-
-        price = product["price"].replace(".", ",")
-
-        xml += f"<price>{price}</price>"
+        ET.SubElement(
+            elem_shop_offer,
+            "url",
+        ).text = f"https://example.test/products/{product['slug']}/"
+        ET.SubElement(
+            elem_shop_offer,
+            "price",
+        ).text = product["price"].replace(".", ",")
 
         product_price = float(product["price"])
         product_old_price = product.get("old_price") or "0"
@@ -150,28 +152,26 @@ def build_yml(products, categories, generated_at) -> str:
             product_old_price = 0.0
 
         if product_old_price > product_price:
-            xml += f"<oldprice>{product['old_price']}</oldprice>"
+            ET.SubElement(
+                elem_shop_offer,
+                "oldprice",
+            ).text = product['old_price']
 
-        xml += "<currencyId>RUB</currencyId>"
-        xml += f"<categoryId>{product['category_id']}</categoryId>"
-        xml += f"<picture>{product['image_url']}</picture>"
-        xml += "<name>{product_name}</name>".format(
-            product_name=document_escape_special_chars(
-                value=product['name'],
-            ),
-        )
+        ET.SubElement(elem_shop_offer, "currencyId").text = "RUB"
+        ET.SubElement(
+            elem_shop_offer,
+            "categoryId"
+        ).text = str(product['category_id'])
+        ET.SubElement(elem_shop_offer, "picture").text = product['image_url']
+        ET.SubElement(elem_shop_offer, "name").text = product['name']
 
         if product["description"]:
-            xml += "<description>{product_description}</description>".format(
-                product_description=document_escape_special_chars(
-                    value=product['description'],
-                ),
-            )
+            ET.SubElement(
+                elem_shop_offer,
+                "description"
+            ).text = product['description']
 
-        xml += "</offer>"
-
-    xml += "</offers>"
-    xml += "<categories>"
+    elem_shop_categories = ET.SubElement(elem_shop, "categories")
 
     for category in sorted(
         categories,
@@ -179,18 +179,18 @@ def build_yml(products, categories, generated_at) -> str:
     ):
         if category["id"] not in products_categories_ids:
             continue
-        xml += '<category id="{category_id}">{category_name}</category>'.format(
-            category_id=category["id"],
-            category_name=document_escape_special_chars(
-                value=category["name"],
-            )
-        )
 
-    xml += "</categories>"
-    xml += "</shop>"
-    xml += "</yml_catalog>"
+        ET.SubElement(
+            elem_shop_categories,
+            "category",
+            id=str(category["id"]),
+        ).text = category["name"]
 
-    return xml
+    return ET.tostring(
+        element=xml,
+        encoding="UTF-8",
+        xml_declaration=True,
+    ).decode()
 
 
 CATEGORIES = [
@@ -308,5 +308,5 @@ if __name__ == "__main__":
     )
     # print(result)
 
-    with open("test.yml", "w") as ftw:
+    with open("test_et_finale.yml", "w") as ftw:
         ftw.write(result)
