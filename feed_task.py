@@ -10,77 +10,6 @@ from datetime import datetime
 import xml.etree.ElementTree as ET
 
 
-def offer_product_is_active(product, categories) -> bool:
-    return bool(product["is_active"])
-
-
-def offer_product_has_name(product, categories) -> bool:
-    name = product["name"]
-    if not name:
-        return False
-
-    name = name.strip()
-    if not name:
-        return False
-
-    return True
-
-
-def offer_product_has_picture(product, categories) -> bool:
-    picture = product["image_url"]
-    if not picture:
-        return False
-
-    picture = picture.strip()
-    if not picture:
-        return False
-
-    if not any((
-        picture.startswith("http://"),
-        picture.startswith("https://"),
-    )):
-        return False
-
-    return True
-
-
-def offer_product_has_valid_price(product, categories) -> bool:
-    price = product["price"]
-    if not price:
-        return False
-
-    price = price.strip()
-    if not price:
-        return False
-
-    try:
-        price = float(price)
-    except ValueError:
-        return False
-
-    if price <= 0.0:
-        return False
-
-    return True
-
-
-def offer_product_category_is_active(product, categories) -> bool:
-    product_category = None
-
-    for category in categories:
-        if product["category_id"] == category["id"]:
-            product_category = category
-            break
-
-    if not product_category:
-        return False
-
-    if not product_category["is_active"]:
-        return False
-
-    return True
-
-
 def build_yml(products, categories, generated_at: datetime) -> str:
     xml = ET.Element(
         "yml_catalog",
@@ -193,6 +122,77 @@ def build_yml(products, categories, generated_at: datetime) -> str:
     ).decode()
 
 
+def offer_product_is_active(product, categories) -> bool:
+    return bool(product["is_active"])
+
+
+def offer_product_has_name(product, categories) -> bool:
+    name = product["name"]
+    if not name:
+        return False
+
+    name = name.strip()
+    if not name:
+        return False
+
+    return True
+
+
+def offer_product_has_picture(product, categories) -> bool:
+    picture = product["image_url"]
+    if not picture:
+        return False
+
+    picture = picture.strip()
+    if not picture:
+        return False
+
+    if not any((
+        picture.startswith("http://"),
+        picture.startswith("https://"),
+    )):
+        return False
+
+    return True
+
+
+def offer_product_has_valid_price(product, categories) -> bool:
+    price = product["price"]
+    if not price:
+        return False
+
+    price = price.strip()
+    if not price:
+        return False
+
+    try:
+        price = float(price)
+    except ValueError:
+        return False
+
+    if price <= 0.0:
+        return False
+
+    return True
+
+
+def offer_product_category_is_active(product, categories) -> bool:
+    product_category = None
+
+    for category in categories:
+        if product["category_id"] == category["id"]:
+            product_category = category
+            break
+
+    if not product_category:
+        return False
+
+    if not product_category["is_active"]:
+        return False
+
+    return True
+
+
 CATEGORIES = [
     {
         "id": 1,
@@ -300,13 +300,58 @@ PRODUCTS = [
 ]
 
 
-if __name__ == "__main__":
+def test_build_yml_with_data():
+    """Should generate file with the data
+
+    Elements `offers` and `categories` should not be empty
+    """
     result = build_yml(
         products=PRODUCTS,
         categories=CATEGORIES,
         generated_at=datetime(2026, 6, 18, 12, 0),
     )
-    # print(result)
 
-    with open("test_et_finale.yml", "w") as ftw:
-        ftw.write(result)
+    assert isinstance(
+        ET.fromstring(result),
+        ET.Element,
+    ), "Generated data is not valid!"
+
+
+def test_build_yml_without_products():
+    """Should generate file without the data
+
+    Elements `offers` and `categories` should be empty
+    """
+    result = build_yml(
+        products=[],
+        categories=CATEGORIES,
+        generated_at=datetime(2026, 6, 18, 12, 0),
+    )
+
+    assert isinstance(
+        ET.fromstring(result),
+        ET.Element,
+    ), "Generated data is not valid!"
+
+
+def test_build_yml_without_categories():
+    """Should generate file without the data
+
+    Elements `offers` and `categories` should be empty
+    """
+    result = build_yml(
+        products=PRODUCTS,
+        categories=[],
+        generated_at=datetime(2026, 6, 18, 12, 0),
+    )
+
+    assert isinstance(
+        ET.fromstring(result),
+        ET.Element,
+    ), "Generated data is not valid!"
+
+
+if __name__ == "__main__":
+    test_build_yml_with_data()
+    test_build_yml_without_products()
+    test_build_yml_without_categories()
